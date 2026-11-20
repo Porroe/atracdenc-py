@@ -3,6 +3,7 @@
 # See NOTICE.md for original authors, source mapping, and modification notices.
 """ATRAC3plus encoder: no native ATRAC codec, subprocess, or runtime compilation."""
 from dataclasses import dataclass
+from typing import Callable
 import numpy as np
 from .dsp import PolyphaseAnalysis, SubbandMDCT
 from .bitstream import frame_packet
@@ -68,7 +69,7 @@ class Encoder:
         return frame_packet(spectra, self.frame_bytes)
 
 
-def encode_pcm(pcm, settings=None):
+def encode_pcm(pcm, settings=None, progress: Callable[[int, int], None] | None = None):
     """Encode an entire per-channel PCM array, including all tail flush packets."""
     settings = settings or EncoderSettings()
     pcm = np.asarray(pcm)
@@ -80,9 +81,12 @@ def encode_pcm(pcm, settings=None):
     frames = (samples + RAW_DELAY + FRAME_SAMPLES - 1) // FRAME_SAMPLES
     encoder = Encoder(settings)
     result = bytearray()
+    total = frames + 1
+    if progress is not None:
+        progress(0, total)
     # encode_block consumes/copies the input; it never retains this PCM buffer.
     block = np.zeros((settings.channels, FRAME_SAMPLES), dtype=np.float32)
-    for index in range(frames + 1):
+    for index in range(total):
         block.fill(0)
         start = index * FRAME_SAMPLES
         if start < samples:
@@ -91,4 +95,6 @@ def encode_pcm(pcm, settings=None):
         packet = encoder.encode_block(block)
         if packet is not None:
             result.extend(packet)
+        if progress is not None:
+            progress(index + 1, total)
     return bytes(result)

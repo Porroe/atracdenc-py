@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import wave
 from pathlib import Path
 from .riff import EXTRA, RATE, SPF, chunks, describe, make_at3, read_loops
@@ -99,7 +100,24 @@ def convert(args, source=None, target=None):
         with wave.open(str(pcm), 'rb') as wav:
             pcm_data = np.frombuffer(wav.readframes(samples), dtype='<i2').reshape(samples, 2).T
         settings = EncoderSettings(bitrate=args.bitrate, packet_bytes=args.packet_bytes)
-        packets = encode_pcm(pcm_data, settings)
+        progress = None
+        if not getattr(args, 'no_progress', False):
+            started = time.monotonic()
+            last = [-1.0]
+            def show(done, total):
+                now = time.monotonic()
+                if done != total and done and now - last[0] < 0.2:
+                    return
+                last[0] = now
+                fraction = done / total if total else 1.0
+                elapsed = now - started
+                eta = (elapsed / fraction - elapsed) if fraction else 0.0
+                print(f'\rencoding {fraction * 100:6.2f}%  elapsed {elapsed:6.1f}s  '
+                      f'ETA {eta:6.1f}s', end='', file=sys.stderr, flush=True)
+                if done == total:
+                    print(file=sys.stderr)
+            progress = show
+        packets = encode_pcm(pcm_data, settings, progress=progress)
         blob = make_at3(packets, samples, settings, loop)
         report = describe(blob)
         if report['warnings']:
@@ -121,6 +139,7 @@ def options(parser):
     loop.add_argument('--loop-start', type=int, help='zero-based PCM sample at 44100 Hz')
     parser.add_argument('--loop-end', type=int, help='exclusive PCM sample at 44100 Hz')
     parser.add_argument('--overwrite', action='store_true')
+    parser.add_argument('--no-progress', action='store_true', help='disable conversion progress on stderr')
 
 
 def main(argv=None):
