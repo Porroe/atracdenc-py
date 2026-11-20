@@ -79,12 +79,14 @@ def write_output(path, blob, overwrite):
             os.unlink(temporary)
 
 
-def convert(args, source=None, target=None):
+def convert(args, source=None, target=None, announce=True):
     source, target = Path(source or args.input), Path(target or args.output)
     if source.resolve() == target.resolve():
         raise ValueError('input and output must be different files')
     if target.exists() and not args.overwrite:
         raise ValueError(f'output exists: {target}; use --overwrite')
+    if announce:
+        print(f'Encoding {source} -> {target}', flush=True)
     with tempfile.TemporaryDirectory(prefix='pce-at3-') as tmp:
         tmp = Path(tmp)
         pcm = source
@@ -148,8 +150,10 @@ def main(argv=None):
                 names = [p.stem.casefold() for p in files]
                 if len(set(names)) != len(names):
                     raise ValueError('input filenames would collide in the output directory')
-                for source in files:
-                    convert(args, source, args.output / (source.stem + '.at3'))
+                for index, source in enumerate(files, 1):
+                    target = args.output / (source.stem + '.at3')
+                    print(f'[{index}/{len(files)}] Encoding {source} -> {target}', flush=True)
+                    convert(args, source, target, announce=False)
         elif args.command == 'inspect':
             info = describe(args.input.read_bytes())
             print(json.dumps(info, indent=2))

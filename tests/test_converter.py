@@ -45,9 +45,10 @@ class IntegrationTests(unittest.TestCase):
         self.root = Path(self.tmp.name)
 
     def cli(self, *args, status=0):
-        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()) as err:
+        with contextlib.redirect_stdout(io.StringIO()) as out, contextlib.redirect_stderr(io.StringIO()) as err:
             actual = main([str(x) for x in args])
         self.assertEqual(actual, status, err.getvalue())
+        return out.getvalue()
 
     def decode(self, path):
         result = subprocess.run(['ffmpeg', '-v', 'error', '-nostdin', '-i', str(path),
@@ -133,7 +134,9 @@ class IntegrationTests(unittest.TestCase):
         inputs.mkdir()
         wav(inputs / 'track 02.WAV', 500)
         wav(inputs / 'track 03.wav', 501)
-        self.cli('batch', inputs, outputs, '--wholeloop')
+        output = self.cli('batch', inputs, outputs, '--wholeloop')
+        self.assertIn('[1/2] Encoding ', output)
+        self.assertIn('[2/2] Encoding ', output)
         self.assertEqual(len(list(outputs.glob('*.at3'))), 2)
         self.cli('convert', inputs / 'track 03.wav', inputs / 'track 03.wav', '--overwrite', status=2)
 
