@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "atracdenc-py"
+version = "0.1.0"
+description = "Python ATRAC3plus spectral encoder port with PSP loop metadata"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24"]
+license = "LGPL-2.1-or-later AND MIT"
+license-files = ["LICENSE", "LICENSE-MIT", "NOTICE.md"]
+
+[project.scripts]
+atracdenc-py = "atracdenc_py.cli:main"
+
+[tool.setuptools]
+packages = ["atracdenc_py"]
+
+[tool.setuptools.package-data]
+atracdenc_py = ["tables.json"]
