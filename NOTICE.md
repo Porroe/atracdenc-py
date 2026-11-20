@@ -51,3 +51,9 @@ No compiled encoder, FFmpeg, NumPy, upstream source tree, or game audio is bundl
 
 ATRAC and related names belong to their respective trademark owners. Software
 licensing does not determine rights to input audio or patent clearance.
+
+Subsequent modifications on November 19, 2026: added bounded immutable Huffman
+and header caches, a bytearray packet writer with a 32-bit flush accumulator,
+and exact-size budgeting before packet serialization. Original DSP/rounding and
+packet-selection order remain unchanged. Frozen-baseline tests and benchmarking
+support are LGPL-2.1-or-later. See PERFORMANCE.md for validation.

@@ -1,3 +1,4 @@
-include README.md LICENSE LICENSE-MIT NOTICE.md PORTING.md VALIDATION.md
+include README.md LICENSE LICENSE-MIT NOTICE.md PORTING.md VALIDATION.md PERFORMANCE.md
 recursive-include tests *.py *.cpp
 recursive-include tools *.py *.cpp
+recursive-include benchmarks *.json

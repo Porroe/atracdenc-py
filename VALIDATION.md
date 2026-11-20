@@ -38,3 +38,7 @@ The test suite does not treat generic-player duration as PSP playback validation
 The table importer reproduced the committed JSON byte-for-byte. Python wheel and
 source archive builds passed. The wheel bundles tables/licenses and no native
 codec; the source archive includes test/reference and table reproduction tools.
+
+Low-risk optimization update: all 17 tests passed, including frozen-baseline byte
+comparisons, cache eviction and bit-buffer boundary tests. Nine benchmark outputs
+retain identical hashes. See PERFORMANCE.md for measured times and coverage.
