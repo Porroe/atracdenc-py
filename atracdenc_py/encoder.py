@@ -80,8 +80,10 @@ def encode_pcm(pcm, settings=None):
     frames = (samples + RAW_DELAY + FRAME_SAMPLES - 1) // FRAME_SAMPLES
     encoder = Encoder(settings)
     result = bytearray()
+    # encode_block consumes/copies the input; it never retains this PCM buffer.
+    block = np.zeros((settings.channels, FRAME_SAMPLES), dtype=np.float32)
     for index in range(frames + 1):
-        block = np.zeros((settings.channels, FRAME_SAMPLES), dtype=np.float32)
+        block.fill(0)
         start = index * FRAME_SAMPLES
         if start < samples:
             segment = pcm[:, start:start+FRAME_SAMPLES]

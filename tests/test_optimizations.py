@@ -5,9 +5,10 @@ from unittest.mock import patch
 import numpy as np
 from atracdenc_py import bitstream
 from atracdenc_py.bitstream import Bits, Scaled, best_spectra
-from atracdenc_py.encoder import EncoderSettings, encode_pcm
+from atracdenc_py.encoder import Encoder, EncoderSettings, encode_pcm, RAW_DELAY
 from atracdenc_py.riff import make_at3
 from legacy_bitstream import Bits as LegacyBits, best_spectra as legacy_best, frame_packet as legacy_packet
+from legacy_bitstream import encode_spectra as legacy_spectra
 
 
 class OptimizationTests(unittest.TestCase):
@@ -59,6 +60,33 @@ class OptimizationTests(unittest.TestCase):
         info=bitstream._best_quantized.cache_info()
         self.assertEqual(info.maxsize,512)
         self.assertEqual(info.currsize,512)
+
+    def test_all_codebooks_keep_sign_fields_and_scalar_inputs(self):
+        rng=np.random.default_rng(248)
+        for index in range(112):
+            block=Scaled(0,rng.uniform(-.99,.99,128).astype(np.float32))
+            values=bitstream.quantize(block,index%7+1)
+            with self.subTest(codebook=index):
+                expected=legacy_spectra(values,index)
+                self.assertEqual(bitstream.encode_spectra(values,index),expected)
+                self.assertEqual(bitstream.encode_spectra(values.tolist(),index),expected)
+
+    def test_reused_pcm_buffer_matches_independent_frame_buffers(self):
+        rng=np.random.default_rng(249)
+        settings=EncoderSettings()
+        for samples in (1,2047,2048,2049,4095,4096,5001):
+            pcm=rng.integers(-16000,16001,(2,samples),dtype=np.int16)
+            encoder=Encoder(settings)
+            expected=bytearray()
+            frames=(samples+RAW_DELAY+2047)//2048
+            for index in range(frames+1):
+                fresh=np.zeros((2,2048),dtype=np.float32)
+                segment=pcm[:,index*2048:(index+1)*2048]
+                fresh[:,:segment.shape[1]]=segment
+                packet=encoder.encode_block(fresh)
+                if packet is not None:expected.extend(packet)
+            with self.subTest(samples=samples):
+                self.assertEqual(encode_pcm(pcm,settings),bytes(expected))
 
     def test_packets_and_riff_equal_previous_encoder(self):
         rng=np.random.default_rng(26)

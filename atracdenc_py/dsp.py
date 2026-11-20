@@ -11,6 +11,15 @@ class MDCT:
     """Port of lib/mdct/mdct.h, preserving float32 pre/post rotations."""
     def __init__(self, n, scale=1.0):
         self.n = n
+        # These integer gather/scatter indices depend only on transform length,
+        # not on the frame. Precompute them without changing the DSP arithmetic.
+        self._k = np.arange(0, n // 2, 2)
+        self._reverse_k = n // 2 - 1 - self._k
+        a, b = self._k[:n // 8], self._k[n // 8:]
+        self._indices = ((3*n//4 - 1 - a, 3*n//4 + a),
+                         (n//4 + a, n//4 - 1 - a),
+                         (3*n//4 - 1 - b, b - n//4),
+                         (n//4 + b, 5*n//4 - 1 - b))
         # Upstream rounds the angular constants to float before evaluating trig.
         alpha = np.float32(2 * np.pi / (8 * n))
         omega = np.float32(2 * np.pi / n)
@@ -21,24 +30,26 @@ class MDCT:
 
     def forward(self, data):
         n = self.n
-        k = np.arange(0, n // 2, 2)
+        k = self._k
+        indices = self._indices
         split = n // 8
         r = np.empty(data.shape[:-1] + (n // 4,), dtype=np.float32)
         i = np.empty_like(r)
-        r[..., :split] = data[..., 3*n//4 - 1 - k[:split]] + data[..., 3*n//4 + k[:split]]
-        i[..., :split] = data[..., n//4 + k[:split]] - data[..., n//4 - 1 - k[:split]]
-        r[..., split:] = data[..., 3*n//4 - 1 - k[split:]] - data[..., k[split:] - n//4]
-        i[..., split:] = data[..., n//4 + k[split:]] + data[..., 5*n//4 - 1 - k[split:]]
+        r[..., :split] = data[..., indices[0][0]] + data[..., indices[0][1]]
+        i[..., :split] = data[..., indices[1][0]] - data[..., indices[1][1]]
+        r[..., split:] = data[..., indices[2][0]] - data[..., indices[2][1]]
+        i[..., split:] = data[..., indices[3][0]] + data[..., indices[3][1]]
         transformed = np.fft.fft(np.complex64((r*self.c + i*self.s) + 1j*(i*self.c - r*self.s)), axis=-1).astype(np.complex64)
         out = np.empty(data.shape[:-1] + (n//2,), dtype=np.float32)
         out[..., k] = -transformed.real*self.c - transformed.imag*self.s
-        out[..., n//2 - 1 - k] = -transformed.real*self.s + transformed.imag*self.c
+        out[..., self._reverse_k] = -transformed.real*self.s + transformed.imag*self.c
         return out
 
     def inverse(self, data):
         n = self.n
-        k = np.arange(0, n//2, 2)
-        r, i = data[..., k], data[..., n//2 - 1 - k]
+        k = self._k
+        indices = self._indices
+        r, i = data[..., k], data[..., self._reverse_k]
         xr = np.float32(-2 * (i*self.s + r*self.c))
         xi = np.float32(-2 * (i*self.c - r*self.s))
         transformed = np.fft.fft(np.complex64(xr + 1j*xi), axis=-1).astype(np.complex64)
@@ -46,15 +57,14 @@ class MDCT:
         i1 = transformed.real*self.s - transformed.imag*self.c
         out = np.empty(data.shape[:-1] + (n,), dtype=np.float32)
         half = n // 8
-        a, b = k[:half], k[half:]
-        out[..., 3*n//4 - 1 - a] = r1[..., :half]
-        out[..., 3*n//4 + a] = r1[..., :half]
-        out[..., n//4 + a] = i1[..., :half]
-        out[..., n//4 - 1 - a] = -i1[..., :half]
-        out[..., 3*n//4 - 1 - b] = r1[..., half:]
-        out[..., b - n//4] = -r1[..., half:]
-        out[..., n//4 + b] = i1[..., half:]
-        out[..., 5*n//4 - 1 - b] = i1[..., half:]
+        out[..., indices[0][0]] = r1[..., :half]
+        out[..., indices[0][1]] = r1[..., :half]
+        out[..., indices[1][0]] = i1[..., :half]
+        out[..., indices[1][1]] = -i1[..., :half]
+        out[..., indices[2][0]] = r1[..., half:]
+        out[..., indices[2][1]] = -r1[..., half:]
+        out[..., indices[3][0]] = i1[..., half:]
+        out[..., indices[3][1]] = i1[..., half:]
         return out
 
 

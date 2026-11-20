@@ -76,3 +76,50 @@ python tools/benchmark_optimizations.py --source . --output /tmp/after.json
 
 The helper prints per-case medians and records timings and payload hashes. Runtime
 tests assert exact outputs; timing thresholds are deliberately not CI assertions.
+
+## Loop-allocation audit and second pass
+
+Baseline for this pass: `19c0e52` (the already optimized encoder above).
+The review found and removed the following repeated allocations:
+
+| Location | Repeated creation | Change |
+| --- | --- | --- |
+| `encode_spectra` | Temporary sign list and sign-field tuples for each Huffman symbol | Reuse precomputed immutable sign sequences for up to four coefficients |
+| `encode_spectra` | Range objects and repeated bit-mask computation inside symbol loops | Construct them once per codebook call |
+| `_best_quantized` | NumPy scalar wrappers on each coefficient access in eight codebook searches | Convert the quantized block to Python integers once per cache miss |
+| `_best_quantized` | Tuples for intermediate winning candidates | Keep local references and freeze only the final winner |
+| `encode_pcm` | A fresh zero-filled input array for each frame | Reuse one input buffer, explicitly clearing it before every frame/tail block |
+| `MDCT.forward/inverse` | Transform-index arrays and derived index expressions for each call | Precompute integer gather/scatter indices when the transform is constructed |
+
+No floating-point expression, evaluation order, precision, FFT, or packet decision
+was changed. The full input buffer is cleared on every frame, so a partial final
+frame and tail flushing cannot retain samples from an earlier frame.
+
+The following allocations remain intentionally: per-frame FFT outputs and
+arithmetic intermediates, scaled-block objects/arrays, packet output bytes and
+cache-key bytes. Reusing them would require more care around buffer ownership,
+aliasing, or NumPy output semantics; the existence of an allocation alone does not
+mean it is safe or useful to remove it.
+
+Same benchmark protocol as above: three medians per one-second stereo fixture,
+caches cold before each encode, same host/Python/NumPy. This table measures the
+additional improvement from the allocation pass, not speed versus AT3Tool.
+
+| Input | kbps | Before (seconds) | After (seconds) | Additional speedup |
+| --- | ---: | ---: | ---: | ---: |
+| silence | 64 | 0.0634 | 0.0605 | 1.05x |
+| silence | 128 | 0.0693 | 0.0651 | 1.07x |
+| silence | 320 | 0.0719 | 0.0656 | 1.10x |
+| music | 64 | 0.3902 | 0.2608 | 1.50x |
+| music | 128 | 0.3831 | 0.2526 | 1.52x |
+| music | 320 | 0.3946 | 0.2545 | 1.55x |
+| noise | 64 | 0.4109 | 0.2718 | 1.51x |
+| noise | 128 | 0.4136 | 0.2792 | 1.48x |
+| noise | 320 | 0.4328 | 0.2926 | 1.48x |
+
+All nine payload hashes and lengths match. Raw results are in
+[benchmarks/allocation-reduction.json](benchmarks/allocation-reduction.json).
+All 19 local tests pass, including the previous exact-output corpus, direct
+comparisons of all 112 Huffman codebooks with both array and Python-list inputs,
+and fresh-versus-reused PCM buffer checks around frame boundaries. Existing
+MDCT-definition and upstream C++ DSP/packet comparisons also pass.

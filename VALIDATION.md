@@ -42,3 +42,8 @@ codec; the source archive includes test/reference and table reproduction tools.
 Low-risk optimization update: all 17 tests passed, including frozen-baseline byte
 comparisons, cache eviction and bit-buffer boundary tests. Nine benchmark outputs
 retain identical hashes. See PERFORMANCE.md for measured times and coverage.
+
+Loop-allocation pass: all 19 tests passed, including all 112 Huffman codebooks
+and fresh-versus-reused PCM buffers at frame boundaries. Nine whole-encoder
+benchmark hashes match commit 19c0e52 byte-for-byte; see PERFORMANCE.md and
+benchmarks/allocation-reduction.json for the additional measured speedup.

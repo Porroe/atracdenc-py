@@ -9,6 +9,16 @@ from .tables import (TABLES, SIZES, STARTS, SCALE, MANT, WORD_LENGTHS,
                      WORD_HUFFMAN, SPECTRAL_HUFFMAN)
 
 
+# A spectral symbol has at most four coefficients. Reuse its possible sign
+# fields instead of constructing a list and (bit, width) tuples for every symbol.
+_SIGN_FIELDS = ((0, 1), (1, 1))
+_SIGN_SEQUENCES = tuple(
+    tuple(tuple(_SIGN_FIELDS[(value >> shift) & 1]
+                for shift in range(count - 1, -1, -1))
+          for value in range(1 << count))
+    for count in range(5))
+
+
 class Bits:
     """MSB-first writer with a byte buffer and at most 31 pending bits."""
     def __init__(self):
@@ -84,26 +94,32 @@ def encode_spectra(values, table_index):
     table = SPECTRAL_HUFFMAN[table_index]
     out = []
     pos = 0
-    while pos < len(values):
+    limit = len(values)
+    group_range = range(group)
+    shifts = range(0, bits * coeffs, bits)
+    mask = (1 << bits) - 1
+    while pos < limit:
         if group != 1:
             out.append((1, 1))
-        for _ in range(group):
+        for _ in group_range:
             code = 0
-            signs = []
-            for i in range(coeffs):
+            signs = sign_count = 0
+            for shift in shifts:
                 value = int(values[pos])
                 pos += 1
                 if not signed and value:
-                    signs.append((int(value < 0), 1))
+                    signs = (signs << 1) | (value < 0)
+                    sign_count += 1
                     value = abs(value)
                 else:
-                    value &= (1 << bits) - 1
-                code |= value << (bits * i)
+                    value &= mask
+                code |= value << shift
             vlc = table[code]
             if not vlc[1]:
                 raise ValueError('quantized value has no Huffman code')
             out.append(vlc)
-            out.extend(signs)
+            if sign_count:
+                out.extend(_SIGN_SEQUENCES[sign_count][signs])
     return out
 
 
@@ -112,14 +128,21 @@ def _best_quantized(word_length, quantized_bytes):
     # The key includes every encoded integer, its count (via byte length), and
     # the word length. Channel, scale index, and source floats no longer affect
     # Huffman selection once quantization has finished. Cache only immutable data.
-    values = np.frombuffer(quantized_bytes, dtype=np.int32)
-    best = None
+    # Convert once per cache miss, rather than creating NumPy scalar wrappers
+    # for each coefficient in each of the eight codebook searches.
+    values = np.frombuffer(quantized_bytes, dtype=np.int32).tolist()
+    best_size = None
+    best_index = 0
+    best_parts = None
     for i in range(8):
         parts = encode_spectra(values, word_length - 1 + 7*i)
         size = sum(bits for _, bits in parts)
-        if best is None or size < best[0]:
-            best = (size, i, tuple(parts))
-    return best[1], best[2]
+        if best_size is None or size < best_size:
+            best_size = size
+            best_index = i
+            best_parts = parts
+    # Freeze only the final winner; the cache never exposes a mutable list.
+    return best_index, tuple(best_parts)
 
 
 def best_spectra(block, word_length):

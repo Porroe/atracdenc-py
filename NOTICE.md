@@ -57,3 +57,8 @@ and header caches, a bytearray packet writer with a 32-bit flush accumulator,
 and exact-size budgeting before packet serialization. Original DSP/rounding and
 packet-selection order remain unchanged. Frozen-baseline tests and benchmarking
 support are LGPL-2.1-or-later. See PERFORMANCE.md for validation.
+
+Further modifications on November 19, 2026: removed per-symbol sign lists and
+intermediate winner tuples, converted quantized blocks to Python integers once
+per cache miss, reused the input PCM frame buffer, and precomputed integer MDCT
+indices. Floating-point expressions and packet decisions are unchanged.

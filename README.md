@@ -108,10 +108,12 @@ needed to use the encoder. See [PORTING.md](PORTING.md) for reproduction and
 ## Performance
 
 Bounded Huffman/header caches, a byte-buffer writer, and counting packet budgets
-before writing avoid repeated work without changing encoded bytes. In a local
-one-second synthetic benchmark at 128 kbps, music encoded about 1.5x faster, noise
-about 1.8x faster, and silence about 5.6x faster than the initial port. See
-[PERFORMANCE.md](PERFORMANCE.md) for timings, exact-output checks and reproduction.
+before writing avoid repeated work without changing encoded bytes. The first
+pass improved local 128 kbps synthetic music by about 1.5x and noise by 1.8x
+versus the initial port. A second pass removed repeated sign lists, scalar
+wrappers, input buffers and transform-index arrays, adding about another 1.5x
+speedup on music/noise fixtures. See [PERFORMANCE.md](PERFORMANCE.md) for the
+separate benchmark baselines, exact-output checks and reproduction.
 
 ## License and provenance
 
